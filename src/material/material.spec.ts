@@ -186,6 +186,9 @@ describe('素材HTTP契约（隔离数据库）', () => {
     }
   })
   it('真实磁盘上传返回直接URL，资源可读取且不覆盖同名文件', async () => {
+    const localEnv = jest.replaceProperty(process, 'env', { ...process.env })
+    delete process.env.COS_SECRET_ID
+    delete process.env.COS_SECRET_KEY
     const root = await mkdtemp(join(tmpdir(), 'cgs-material-test-'))
     const previousDir = process.env.MATERIAL_UPLOAD_DIR
     const previousUrl = process.env.PUBLIC_API_URL
@@ -216,6 +219,7 @@ describe('素材HTTP契约（隔离数据库）', () => {
       else process.env.PUBLIC_API_URL = previousUrl
       for (const name of await readdir(root)) await unlink(join(root, name))
       await rmdir(root)
+      localEnv.restore()
     }
   })
   it('上传服务拒绝空文件、伪图片及路径穿越', async () => {

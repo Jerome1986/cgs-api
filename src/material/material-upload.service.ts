@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, extname } from 'node:path'
+import { uploadMaterialToCos } from './material-cos'
 /** 上传文件最小结构 */
 export interface UploadFile {
   /** 原始文件名 */
@@ -12,7 +13,7 @@ export interface UploadFile {
 /** 文件存储服务，随机文件名防覆盖，路径不采用客户端目录 */
 @Injectable()
 export class MaterialUploadService {
-  /** 保存到独立资源目录，部署时需持久化此目录 */
+  /** 新素材包优先保存到已配置的 COS；封面及本地模式使用持久化资源目录。 */
   async save(file: UploadFile | undefined, cover: boolean) {
     if (!file?.buffer.length) throw new BadRequestException('请选择文件')
     const ext = extname(file.originalname).toLowerCase()
@@ -28,6 +29,10 @@ export class MaterialUploadService {
       b.subarray(0, 2).toString() === 'BM'
     if (cover && !image) throw new BadRequestException('封面图片内容无效')
     const name = randomUUID() + (cover ? ext : /^[.][a-z0-9]{1,12}$/.test(ext) ? ext : '.bin')
+    if (!cover) {
+      const url = await uploadMaterialToCos(name, b)
+      if (url) return url
+    }
     const root = resolve(process.env.MATERIAL_UPLOAD_DIR ?? 'uploads/materials')
     await mkdir(root, { recursive: true })
     await writeFile(resolve(root, name), b, { flag: 'wx' })

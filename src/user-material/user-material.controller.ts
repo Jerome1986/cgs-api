@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common'
 import type { Response } from 'express'
 import { pipeline } from 'node:stream/promises'
+import { signedMaterialDownload } from '../material/material-cos'
 import { UserAuthGuard } from '../user-auth/user-auth.guard'
 import type { UserRequest } from '../user-auth/user-auth.guard'
 import { UserMaterialService } from './user-material.service'
@@ -94,10 +95,15 @@ export class UserMaterialController {
       this.service.id(dto.material_id),
       dto.index
     )
-    const stream = await this.files.open(url)
+    const signed = signedMaterialDownload(url)
+    res.setHeader('Cache-Control', 'private, no-store')
+    if (signed && req.headers['x-cgs-direct-download'] === '1') {
+      res.redirect(307, signed)
+      return
+    }
+    const stream = await this.files.open(signed ?? url)
     res.setHeader('Content-Type', 'application/octet-stream')
     res.setHeader('X-Content-Type-Options', 'nosniff')
-    res.setHeader('Cache-Control', 'private, no-store')
     res.setHeader('Content-Disposition', 'attachment')
     await pipeline(stream, res)
   }
