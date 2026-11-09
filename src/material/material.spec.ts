@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, unlink, rmdir } from 'node:fs/promises'
+import { mkdtemp, open, readdir, unlink, rmdir, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Test } from '@nestjs/testing'
@@ -200,7 +200,7 @@ describe('素材HTTP契约（隔离数据库）', () => {
         const res = await request(app.getHttpServer())
           .post('/api/material-upload-files')
           .set('Authorization', 'Bearer test')
-          .attach('file', Buffer.from('zip-test'), 'same.zip')
+          .attach('file', Buffer.concat([Buffer.from('504b0506', 'hex'), Buffer.alloc(18)]), 'same.zip')
           .expect(201)
         const url: unknown = res.body
         expect(typeof url).toBe('string')
@@ -212,6 +212,18 @@ describe('素材HTTP契约（隔离数据库）', () => {
         expect(downloaded.headers['x-content-type-options']).toBe('nosniff')
       }
       expect(urls[0]).not.toBe(urls[1])
+      const source = join(root, 'over-200.bin')
+      const handle = await open(source, 'wx')
+      const size = 200 * 1024 * 1024 + 1
+      try {
+        await handle.truncate(size)
+      } finally {
+        await handle.close()
+      }
+      const uploaded = await request(app.getHttpServer()).post('/api/material-upload-files')
+        .set('Authorization', 'Bearer test').attach('file', source).expect(201)
+      const stored = new URL(String(uploaded.body)).pathname.split('/').pop()!
+      expect((await stat(join(root, stored))).size).toBe(size)
     } finally {
       if (previousDir === undefined) delete process.env.MATERIAL_UPLOAD_DIR
       else process.env.MATERIAL_UPLOAD_DIR = previousDir
@@ -225,9 +237,10 @@ describe('素材HTTP契约（隔离数据库）', () => {
   it('上传服务拒绝空文件、伪图片及路径穿越', async () => {
     const service = new MaterialUploadService()
     await expect(service.save(undefined, true)).rejects.toThrow()
-    await expect(
-      service.save({ originalname: 'a.png', buffer: Buffer.from('script') }, true)
-    ).rejects.toThrow()
+    await request(app.getHttpServer()).post('/api/material-upload-cover')
+      .set('Authorization', 'Bearer test').attach('file', Buffer.from('script'), 'a.png').expect(400)
+    await request(app.getHttpServer()).post('/api/material-upload-files')
+      .set('Authorization', 'Bearer test').attach('file', Buffer.from('PK'), 'bad.zip').expect(400)
     expect(() => service.path('../secret')).toThrow()
   })
 })

@@ -11,6 +11,7 @@ import {
   UseInterceptors
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
+import { tmpdir } from 'node:os'
 import type { Response } from 'express'
 import { AdminAuthGuard } from '../admin/admin-auth.guard'
 import { MaterialAssetGuard } from './material-asset.guard'
@@ -22,19 +23,21 @@ export class MaterialUploadController {
   @UseGuards(AdminAuthGuard)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 10 * 1024 * 1024, files: 1 }
+      dest: tmpdir(),
+      limits: { files: 1 }
     })
   )
   async cover(@UploadedFile() file: UploadFile | undefined, @Res() res: Response) {
     res.json(await this.service.save(file, true))
   }
 
-  /** 管理员上传素材文件，最大200MB，保留直接URL响应 */
+  /** 管理员上传单个素材，按流写入临时文件，不设应用层字节上限。 */
   @Post('material-upload-files')
   @UseGuards(AdminAuthGuard)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 200 * 1024 * 1024, files: 1 }
+      dest: tmpdir(),
+      limits: { files: 1 }
     })
   )
   async files(@UploadedFile() file: UploadFile | undefined, @Res() res: Response) {

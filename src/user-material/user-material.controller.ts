@@ -101,7 +101,9 @@ export class UserMaterialController {
       res.redirect(307, signed)
       return
     }
-    const stream = await this.files.open(signed ?? url)
+    const { stream, length, digest } = await this.files.open(signed ?? url)
+    if (length) res.setHeader('Content-Length', length)
+    if (digest) res.setHeader('x-cos-meta-sha256', digest)
     res.setHeader('Content-Type', 'application/octet-stream')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Content-Disposition', 'attachment')

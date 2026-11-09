@@ -15,16 +15,23 @@ export class UserMaterialFileService {
       const path = this.uploads.path(parsed.pathname.split('/').pop()!)
       const exists = await stat(path).catch(() => null)
       if (!exists?.isFile()) throw new NotFoundException('素材文件不存在，请联系管理员')
-      return createReadStream(path)
+      return { stream: createReadStream(path), length: String(exists.size), digest: null }
     }
     try {
       const response = await fetch(parsed, {
         redirect: 'error',
-        // 与Electron保持10分钟总传输时限，避免远程大文件在2分钟被提前中断。
-        signal: AbortSignal.timeout(10 * 60 * 1000)
+        headers: { 'Accept-Encoding': 'identity' }
       })
-      if (!response.ok || !response.body) throw new Error('upstream unavailable')
-      return Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0])
+      if (response.status !== 200 || response.headers.has('content-range') || !response.body) {
+        await response.body?.cancel()
+        throw new Error('upstream unavailable')
+      }
+      const encoding = response.headers.get('content-encoding')
+      return {
+        stream: Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+        length: !encoding || encoding === 'identity' ? response.headers.get('content-length') : null,
+        digest: response.headers.get('x-cos-meta-sha256')
+      }
     } catch {
       throw new BadGatewayException('素材文件暂时不可用，可使用原授权重试')
     }

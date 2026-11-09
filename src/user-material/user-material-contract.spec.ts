@@ -2,7 +2,6 @@ import { Test } from '@nestjs/testing'
 import { ExecutionContext, INestApplication, UnauthorizedException } from '@nestjs/common'
 import type { Request } from 'express'
 import request from 'supertest'
-import { Readable } from 'node:stream'
 import { UserMaterialController } from './user-material.controller'
 import { UserMaterialService } from './user-material.service'
 import { UserMaterialFileService } from './user-material-file.service'
@@ -88,16 +87,16 @@ describe('客户端素材对接修复（隔离数据库）', () => {
     expect(result.reused).toBe(true)
     expect(result.coins).toBe(20)
   })
-  it('远程文件采用与客户端相同的10分钟时限并可读取完整流', async () => {
+  it('远程文件完整流不受固定下载总时长限制', async () => {
     const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('file-content'))
     const timeout = jest.spyOn(AbortSignal, 'timeout')
     try {
       const files = new UserMaterialFileService({} as MaterialUploadService)
-      const stream: Readable = await files.open('https://example.com/file.zip')
+      const { stream } = await files.open('https://example.com/file.zip')
       const chunks: Buffer[] = []
       for await (const chunk of stream) chunks.push(Buffer.from(chunk))
       expect(Buffer.concat(chunks).toString()).toBe('file-content')
-      expect(timeout).toHaveBeenCalledWith(600000)
+      expect(timeout).not.toHaveBeenCalledWith(600000)
       expect(fetchSpy).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ redirect: 'error' }))
     } finally {
       timeout.mockRestore()

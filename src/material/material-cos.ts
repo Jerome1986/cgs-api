@@ -1,8 +1,10 @@
 import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common'
 import { createHash, createHmac } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
+import COS from 'cos-nodejs-sdk-v5'
 
 const downloadOrigin = 'https://download.topcg.top'
-const uploadOrigin = 'https://cgs-materials-1253114642.cos.ap-guangzhou.myqcloud.com'
 const objectPath = /^\/materials\/[a-f0-9-]{36}\.[a-z0-9]{1,12}$/
 
 /** 仅签发本项目生成的对象路径，按 COS V5 将方法、路径和 Host 绑定到签名。 */
@@ -28,20 +30,70 @@ export function signedMaterialDownload(address: string) {
 }
 
 /** 配置 COS 凭据后将新素材文件上传到广州桶，失败时禁止返回无效地址。 */
-export async function uploadMaterialToCos(name: string, data: Buffer) {
+export async function uploadMaterialToCos(name: string, path: string, size: number) {
   if (!process.env.COS_SECRET_ID && !process.env.COS_SECRET_KEY) return undefined
-  const url = new URL('/materials/' + name, uploadOrigin)
-  const authorization = sign(url, 'put')
+  if (!process.env.COS_SECRET_ID || !process.env.COS_SECRET_KEY)
+    throw new ServiceUnavailableException('素材云存储凭据未配置完整')
+  const cos = new COS({
+    SecretId: process.env.COS_SECRET_ID,
+    SecretKey: process.env.COS_SECRET_KEY
+  })
+  const object = {
+    Bucket: 'cgs-materials-1253114642',
+    Region: 'ap-guangzhou',
+    Key: 'materials/' + name
+  }
+  const hash = createHash('sha256')
+  await pipeline(createReadStream(path), hash)
+  const metadata = {
+    ContentType: 'application/octet-stream',
+    Headers: { 'x-cos-meta-sha256': hash.digest('hex') }
+  }
   try {
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: { Authorization: authorization, 'Content-Type': 'application/octet-stream' },
-      body: new Uint8Array(data.buffer, data.byteOffset, data.byteLength) as BodyInit,
-      redirect: 'error',
-      signal: AbortSignal.timeout(10 * 60 * 1000)
-    })
-    if (!response.ok) throw new Error()
-    return downloadOrigin + url.pathname
+    if (size <= 4 * 1024 ** 3) {
+      const body = createReadStream(path)
+      try {
+        await cos.putObject({
+          ...object,
+          ...metadata,
+          Body: body,
+          ContentLength: size
+        })
+      } finally {
+        body.destroy()
+      }
+    } else {
+      const { UploadId } = await cos.multipartInit({ ...object, ...metadata })
+      const partSize = Math.max(64 * 1024 ** 2, Math.ceil(size / 10000))
+      const Parts: COS.Part[] = []
+      try {
+        for (let start = 0; start < size; start += partSize) {
+          const length = Math.min(size - start, partSize)
+          const Body = createReadStream(path, {
+            start,
+            end: start + length - 1
+          })
+          const PartNumber = Parts.length + 1
+          try {
+            const { ETag } = await cos.multipartUpload({
+              ...object,
+              UploadId,
+              PartNumber,
+              Body,
+              ContentLength: length
+            })
+            Parts.push({ PartNumber, ETag })
+          } finally {
+            Body.destroy()
+          }
+        }
+        await cos.multipartComplete({ ...object, UploadId, Parts })
+      } catch (error) {
+        await cos.multipartAbort({ ...object, UploadId }).catch(() => {})
+        throw error
+      }
+    }
+    return downloadOrigin + '/' + object.Key
   } catch {
     throw new BadGatewayException('素材上传到云存储失败，请检查存储权限或重试')
   }
