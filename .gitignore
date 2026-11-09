@@ -16,3 +16,10 @@ pnpm-debug.log*
 
 .temp
 .tmp
+
+# 本机浏览器验收临时身份、截图和上传样本
+/.browser-qa/
+/browser-qa-uploads/
+
+# 运行时上传文件
+/uploads/

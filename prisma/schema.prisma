@@ -2,8 +2,162 @@ generator client {
   provider = "prisma-client-js"
 }
 
+/// 素材属性标签字典
+model AttributeTag {
+  /// 标签编号
+  id Int @id @default(autoincrement())
+  /// 标签名称，唯一
+  name String @unique @db.VarChar(50)
+  /// 英文名称，可为空字符串
+  enName String @default("") @map("en_name") @db.VarChar(100)
+  /// 创建时间
+  createdAt DateTime @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("attribute_tags")
+}
+
+/// 素材颜色标签字典
+model ColorTag {
+  /// 颜色标签编号
+  id Int @id @default(autoincrement())
+  /// 大写十六进制色值，支持RGB及RGBA，唯一
+  color String @unique @db.VarChar(9)
+  /// 创建时间
+  createdAt DateTime @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("color_tags")
+}
+
 datasource db {
   provider = "mysql"
+}
+
+/// 后台维护、Electron随机展示的水印配置
+model Watermark {
+  /// 水印编号，对外输出字符串_id
+  id Int @id @default(autoincrement())
+  /// 水印名称
+  name String @db.VarChar(100)
+  /// HTTP图片地址，对外兼容images字段
+  imageUrl String @map("image_url") @db.VarChar(4096)
+  /// 删除时间，空表示可用；保留原记录与图片文件
+  deletedAt DateTime? @map("deleted_at")
+  /// 创建时间
+  createdAt DateTime @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([deletedAt, id])
+  @@map("watermarks")
+}
+
+/// 后台与Electron共享的金币充值包和会员套餐
+model Product {
+  /// 购买此套餐的历史订单
+  orders Order[]
+  /// 商品编号，对外序列化为字符串_id
+  id Int @id @default(autoincrement())
+  /// 商品类型：gold金币充值、membership会员套餐
+  productType String @map("product_type") @db.VarChar(16)
+  /// 商品中文名称
+  productName String @map("product_name") @db.VarChar(200)
+  /// 商品英文名称
+  enName String @default("") @map("en_name") @db.VarChar(200)
+  /// 人民币价格，单位元，最多两位小数
+  price Decimal @db.Decimal(10, 2)
+  /// 金币数量，会员商品为0
+  goldCoinsAmount Int @default(0) @map("gold_coins_amount")
+  /// annual年费、permanent永久，金币商品为空字符串
+  membershipType String @default("") @map("membership_type") @db.VarChar(16)
+  /// 每日下载额度，金币商品为0
+  dailyDownloadLimit Int @default(0) @map("daily_download_limit")
+  /// 中文商品描述
+  description String @db.VarChar(2000)
+  /// 英文商品描述
+  enDescription String @default("") @map("en_description") @db.VarChar(2000)
+  /// 是否上架
+  isActive Boolean @default(true) @map("is_active")
+  /// 删除时间，保留商品记录供历史业务关联
+  deletedAt DateTime? @map("deleted_at")
+  /// 创建时间
+  createdAt DateTime @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([deletedAt, isActive, productType, id])
+  @@map("products")
+}
+
+/// 素材分类，最多三级，同一父分类下继承素材类型
+model Category {
+  /// 分类编号，自增整数主键
+  id        Int        @id @default(autoincrement())
+  /// 父分类编号，空表示一级分类
+  parentId  Int?       @map("parent_id")
+  /// 分类中文名称
+  name      String     @db.VarChar(50)
+  /// 分类英文名称
+  enName    String     @map("en_name") @db.VarChar(100)
+  /// 素材类型：模型、贴图、灯光、材质
+  type      String     @db.VarChar(16)
+  /// 分类层级：1一级、2二级、3三级
+  level     Int
+  /// 排序值，越小越靠前，同值按编号升序
+  sort      Int        @default(0)
+  /// 创建时间
+  createdAt DateTime   @default(now()) @map("created_at")
+  /// 更新时间，由Prisma维护
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  /// 直属父分类，删除时禁止级联删除子分类
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  /// 直属子分类
+  children  Category[] @relation("CategoryTree")
+  materials Material[] @relation("MaterialTop")
+  subMaterials Material[] @relation("MaterialSub")
+
+  @@index([type, level, parentId, sort, id])
+  @@map("categories")
+}
+
+/// 后台与Electron共享素材
+model Material {
+  favorites UserFavorite[]
+  downloadGrants DownloadGrant[]
+  /// 素材编号
+  id Int @id @default(autoincrement())
+  /// 一级分类编号
+  topId Int @map("top_id")
+  /// 二级分类编号
+  subId Int? @map("sub_id")
+  /// 素材名称
+  name String @db.VarChar(200)
+  /// 英文名称
+  enName String @default("") @map("en_name") @db.VarChar(200)
+  /// 封面地址
+  coverUrl String @map("cover_url") @db.Text
+  /// 文件地址，兼容字符串和数组
+  filesUrl Json @map("files_url")
+  /// 属性名称数组
+  tags Json
+  /// 颜色数组
+  colors Json
+  /// 素材类型
+  type String @db.VarChar(16)
+  /// 上架状态，1上架0下架
+  status Int @default(1)
+  /// 创建时间
+  createdAt DateTime @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt DateTime @updatedAt @map("updated_at")
+  /// 一级分类，禁止删除被引用分类
+  top Category @relation("MaterialTop", fields: [topId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  /// 二级分类，禁止删除被引用分类
+  sub Category? @relation("MaterialSub", fields: [subId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  @@index([type, status, id])
+  @@index([topId, subId])
+  @@map("materials")
 }
 
 enum Role {
@@ -13,6 +167,12 @@ enum Role {
 }
 
 model Admin {
+  /// 管理员显示名称，空时展示登录账号
+  displayName String @default("") @map("display_name") @db.VarChar(100)
+  /// 管理员头像HTTP地址，空表示使用默认头像
+  avatarUrl String @default("") @map("avatar_url") @db.VarChar(4096)
+  /// 密码变更后递增，使旧访问令牌失效
+  tokenVersion Int @default(0) @map("token_version")
   id        Int      @id @default(autoincrement())
   username  String   @unique
   password  String
@@ -22,4 +182,118 @@ model Admin {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("admin")
+}
+
+/// 业务用户，与后台管理员账号独立存储
+model User {
+  favorites UserFavorite[]
+  downloadGrants DownloadGrant[]
+  downloadUsage DownloadUsage[]
+  /// 用户购买的历史订单
+  orders Order[]
+  /// 业务用户编号，MySQL 自增整数主键
+  id        Int       @id @default(autoincrement())
+  /// 业务用户账号，唯一
+  username  String    @unique @db.VarChar(191)
+  /// 客户端登录密码bcrypt哈希；旧账号为空，不允许密码登录
+  passwordHash String? @map("password_hash") @db.VarChar(60)
+  /// 业务用户身份，与后台管理员权限独立
+  role      String    @default("user") @db.VarChar(32)
+  /// 账号状态：1 正常，0 禁用
+  status    Int       @default(1)
+  /// 用户金币余额，单位：金币
+  coins     Int       @default(0)
+  /// 会员每日首次素材授权额度；0表示未配置，不猜测默认额度
+  dailyDownloadLimit Int @default(0) @map("daily_download_limit")
+  /// 会员到期时间，空表示未设置
+  endDate   DateTime? @map("end_date")
+  /// 用户创建时间
+  createdAt DateTime  @default(now()) @map("created_at")
+  /// 用户更新时间，由 Prisma 写入时维护
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+/// 用户收藏，同一用户同一素材仅保留一条
+model UserFavorite {
+  id Int @id @default(autoincrement())
+  userId Int @map("user_id")
+  materialId Int @map("material_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  @@unique([userId, materialId])
+  @@map("user_favorites")
+}
+
+/// 素材下载授权与扣费凭据，失败重试及重新下载复用原授权
+model DownloadGrant {
+  id Int @id @default(autoincrement())
+  userId Int @map("user_id")
+  materialId Int @map("material_id")
+  kind String @db.VarChar(16)
+  chargedCoins Int @default(0) @map("charged_coins")
+  dailyKey String? @map("daily_key") @db.VarChar(10)
+  completedAt DateTime? @map("completed_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  @@unique([userId, materialId])
+  @@index([userId, completedAt])
+  @@map("download_grants")
+}
+
+/// 上海业务日期下已使用的首次素材授权数量
+model DownloadUsage {
+  id Int @id @default(autoincrement())
+  userId Int @map("user_id")
+  dayKey String @map("day_key") @db.VarChar(10)
+  used Int @default(0)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, dayKey])
+  @@map("download_usage")
+}
+
+/// 后台与Electron共用订单，价格及权益均保存购买时快照
+model Order {
+  /// 订单主键，对外为字符串_id
+  id Int @id @default(autoincrement())
+  /// 平台业务订单号，不等同第三方支付流水
+  orderNo String @unique @map("order_no") @db.VarChar(64)
+  /// 购买用户编号
+  userId Int @map("user_id")
+  /// 购买商品编号，历史商品禁止物理删除
+  productId Int @map("product_id")
+  /// 商品中文名称快照
+  productName String @map("product_name") @db.VarChar(200)
+  /// 商品类型快照：gold金币充值、membership购买会员
+  productType String @map("product_type") @db.VarChar(16)
+  /// 人民币应付金额快照，单位元
+  amount Decimal @db.Decimal(10, 2)
+  /// 状态：PENDING未支付、PAID已支付、CANCELLED已取消、FAILED支付失败、COMPLETED已完成
+  status String @default("PENDING") @db.VarChar(16)
+  /// 第三方支付流水，未创建支付时为空
+  paymentId String? @unique @map("payment_id") @db.VarChar(128)
+  /// 金币数量快照，会员订单为0
+  goldCoinsAmount Int @default(0) @map("gold_coins_amount")
+  /// 会员类型快照：annual年费、permanent永久，金币订单为空
+  membershipType String @default("") @map("membership_type") @db.VarChar(16)
+  /// 每日下载额度快照，金币订单为0
+  dailyDownloadLimit Int @default(0) @map("daily_download_limit")
+  /// 可信支付确认时间，未确认时为空
+  paidAt DateTime? @map("paid_at")
+  /// 创建订单时间
+  createdAt DateTime @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt DateTime @updatedAt @map("updated_at")
+  /// 订单所属用户，禁止级联删除历史订单
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  /// 原始商品，展示名称和权益以订单快照为准
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, createdAt, id])
+  @@index([status, createdAt, id])
+  @@index([productId])
+  @@map("orders")
 }

@@ -1,0 +1,20 @@
+CREATE TABLE materials (
+ id INTEGER NOT NULL AUTO_INCREMENT COMMENT '素材编号',
+ top_id INTEGER NOT NULL COMMENT '一级分类编号',
+ sub_id INTEGER NULL COMMENT '二级分类编号',
+ name VARCHAR(200) NOT NULL COMMENT '素材名称',
+ en_name VARCHAR(200) NOT NULL DEFAULT '' COMMENT '英文名称',
+ cover_url TEXT NOT NULL COMMENT '封面地址',
+ files_url JSON NOT NULL COMMENT '文件地址，兼容字符串或数组',
+ tags JSON NOT NULL COMMENT '属性名称数组',
+ colors JSON NOT NULL COMMENT '颜色数组',
+ type VARCHAR(16) NOT NULL COMMENT '素材类型',
+ status INTEGER NOT NULL DEFAULT 1 COMMENT '1上架0下架',
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+ updated_at DATETIME(3) NOT NULL COMMENT '更新时间',
+ PRIMARY KEY(id),
+ INDEX materials_type_status_id_idx(type,status,id),
+ INDEX materials_top_id_sub_id_idx(top_id,sub_id),
+ CONSTRAINT materials_top_id_fkey FOREIGN KEY(top_id) REFERENCES categories(id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+ CONSTRAINT materials_sub_id_fkey FOREIGN KEY(sub_id) REFERENCES categories(id) ON DELETE RESTRICT ON UPDATE RESTRICT
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci COMMENT='后台与Electron共享素材';
