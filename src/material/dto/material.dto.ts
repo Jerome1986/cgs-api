@@ -79,6 +79,17 @@ export class DeleteMaterialDto {
 }
 /** 兼容后台与Electron的查询参数，统一在Service归一化 */
 export class QueryMaterialDto {
+  /** 多选属性标签名称，所有选中项均须匹配；兼容旧单选参数 */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? [value] : value)
+  @IsArray() @ArrayMaxSize(100) @IsString({ each: true }) @Length(1, 50, { each: true })
+  tags?: string[]
+  /** 多选颜色值，所有选中项均须匹配 */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? [value] : value)
+  @IsArray() @ArrayMaxSize(100)
+  @Matches(/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i, { each: true })
+  colors?: string[]
   /** 后台页码 */
   @IsOptional()
   @Type(() => Number)

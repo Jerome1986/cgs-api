@@ -70,6 +70,8 @@ export class MaterialService {
       color = q.currentColor ?? q.color
     if (tag) and.push({ tags: { array_contains: [tag] } })
     if (color) and.push({ colors: { array_contains: [color] } })
+    if (q.tags?.length) and.push({ tags: { array_contains: q.tags } })
+    if (q.colors?.length) and.push({ colors: { array_contains: q.colors } })
     if (both) {
       const ids = [q.loveIds, q.downIds].filter(Boolean).join(',').split(',').filter(Boolean)
       if (ids.length > 1000) throw new BadRequestException('编号过多')

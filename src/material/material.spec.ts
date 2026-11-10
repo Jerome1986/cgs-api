@@ -79,6 +79,18 @@ describe('素材HTTP契约（隔离数据库）', () => {
   })
   afterAll(async () => app.close())
   beforeEach(() => jest.clearAllMocks())
+  it('Electron多选属性与颜色在分页前筛选', async () => {
+    await request(app.getHttpServer()).get('/api/filterMaterial')
+      .query({ pageType: '模型', pageSize: 100, tags: ['现代', '简约'], colors: ['#FFFFFF', '#000000'] })
+      .expect(200)
+    expect(repo.findMany).toHaveBeenCalledWith({ status: 1, type: '模型',
+      AND: [
+        { tags: { array_contains: ['现代', '简约'] } },
+        { colors: { array_contains: ['#FFFFFF', '#000000'] } }
+      ]
+    }, 0, 100)
+    await request(app.getHttpServer()).get('/api/filterMaterial').query({ tags: [''] }).expect(400)
+  })
   it('旧根路径和api路径复用，分页和字段投影正确', async () => {
     const res = await request(app.getHttpServer())
       .get('/material-byCateId-get?pageType=模型&cate_id=ALL&pagesNum=2&pagesSize=10')
@@ -108,7 +120,7 @@ describe('素材HTTP契约（隔离数据库）', () => {
       sub: { name: '沙发', enName: '' }
     }])
     const res = await request(app.getHttpServer()).get('/material-byCateId-get').expect(200)
-    expect(res.body.data.list[0]).toMatchObject({
+    expect((res.body as { data: { list: unknown[] } }).data.list[0]).toMatchObject({
       cate_path: '家具 / 沙发', en_cate_path: 'Furniture / 沙发'
     })
   })
