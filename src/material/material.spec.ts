@@ -79,6 +79,53 @@ describe('素材HTTP契约（隔离数据库）', () => {
   })
   afterAll(async () => app.close())
   beforeEach(() => jest.clearAllMocks())
+  it('发布与编辑三级分类，回显完整分类路径并支持三级筛选', async () => {
+    for (const method of ['post', 'put'] as const) {
+      repo.category.mockResolvedValueOnce({ id: 1, level: 1, type: '模型' })
+        .mockResolvedValueOnce({ id: 2, level: 2, parentId: 1, type: '模型' })
+        .mockResolvedValueOnce({ id: 3, level: 3, parentId: 2, type: '模型' })
+      await request(app.getHttpServer())[method](method === 'post' ? '/api/material-add' : '/api/material-update')
+        .set('Authorization', 'Bearer test')
+        .send({ ...body, sub_id: '2', third_id: '3', ...(method === 'put' ? { _id: '1' } : {}) })
+        .expect(method === 'post' ? 201 : 200)
+    }
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ topId: 1, subId: 2, thirdId: 3 }))
+    expect(repo.update).toHaveBeenCalledWith(1, expect.objectContaining({ thirdId: 3 }))
+    repo.findMany.mockResolvedValueOnce([{
+      ...row, subId: 2, thirdId: 3,
+      sub: { name: '木纹', enName: 'Wood' }, third: { name: '橡木', enName: '' }
+    }])
+    const response = await request(app.getHttpServer()).get('/api/filterMaterial?cateId=3').expect(200)
+    expect(response.body.data.list[0]).toMatchObject({
+      third_id: '3', cate_path: '家具 / 木纹 / 橡木', en_cate_path: 'Furniture / Wood / 橡木'
+    })
+    expect(repo.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      OR: [{ topId: 3 }, { subId: 3 }, { thirdId: 3 }]
+    }), 0, 20)
+  })
+  it('拒绝缺少二级分类及跨父级、跨类型的三级分类', async () => {
+    await request(app.getHttpServer()).post('/api/material-add').set('Authorization', 'Bearer test')
+      .send({ ...body, third_id: '3' }).expect(400)
+    for (const third of [
+      { id: 3, level: 3, parentId: 99, type: '模型' },
+      { id: 3, level: 3, parentId: 2, type: '材质' },
+      { id: 3, level: 2, parentId: 2, type: '模型' }
+    ]) {
+      repo.category.mockResolvedValueOnce({ id: 1, level: 1, type: '模型' })
+        .mockResolvedValueOnce({ id: 2, level: 2, parentId: 1, type: '模型' })
+        .mockResolvedValueOnce(third)
+      await request(app.getHttpServer()).post('/api/material-add').set('Authorization', 'Bearer test')
+        .send({ ...body, sub_id: '2', third_id: '3' }).expect(400)
+    }
+    expect(repo.create).not.toHaveBeenCalled()
+  })
+  it('旧素材不选三级时兼容，编辑清空三级关联', async () => {
+    const res = await request(app.getHttpServer()).get('/api/filterMaterial').expect(200)
+    expect(res.body.data.list[0].third_id).toBe('')
+    await request(app.getHttpServer()).put('/api/material-update').set('Authorization', 'Bearer test')
+      .send({ ...body, _id: '1', third_id: '' }).expect(200)
+    expect(repo.update).toHaveBeenCalledWith(1, expect.objectContaining({ thirdId: null }))
+  })
   it('Electron多选属性与颜色在分页前筛选', async () => {
     await request(app.getHttpServer()).get('/api/filterMaterial')
       .query({ pageType: '模型', pageSize: 100, tags: ['现代', '简约'], colors: ['#FFFFFF', '#000000'] })

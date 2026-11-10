@@ -12,7 +12,8 @@ export class MaterialRepository {
       take,
       include: {
         top: { select: { name: true, enName: true } },
-        sub: { select: { name: true, enName: true } }
+        sub: { select: { name: true, enName: true } },
+        third: { select: { name: true, enName: true } }
       },
       orderBy: { id: 'desc' }
     })

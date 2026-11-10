@@ -116,6 +116,8 @@ model Category {
   children  Category[] @relation("CategoryTree")
   materials Material[] @relation("MaterialTop")
   subMaterials Material[] @relation("MaterialSub")
+  /// 关联到该三级分类的素材
+  thirdMaterials Material[] @relation("MaterialThird")
 
   @@index([type, level, parentId, sort, id])
   @@map("categories")
@@ -131,6 +133,8 @@ model Material {
   topId Int @map("top_id")
   /// 二级分类编号
   subId Int? @map("sub_id")
+  /// 三级分类编号，旧素材为空
+  thirdId Int? @map("third_id")
   /// 素材名称
   name String @db.VarChar(200)
   /// 英文名称
@@ -156,6 +160,9 @@ model Material {
   /// 二级分类，禁止删除被引用分类
   sub Category? @relation("MaterialSub", fields: [subId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   @@index([type, status, id])
+  /// 三级分类，禁止删除被引用分类
+  third Category? @relation("MaterialThird", fields: [thirdId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  @@index([thirdId])
   @@index([topId, subId])
   @@map("materials")
 }

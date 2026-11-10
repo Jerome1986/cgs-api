@@ -20,6 +20,8 @@ export class MaterialDto {
   @IsString() @Matches(/^[1-9]\d{0,9}$/) top_id: string
   /** 二级分类编号，空串表示不选 */
   @IsString() @Matches(/^(?:[1-9]\d{0,9})?$/) sub_id = ''
+  /** 三级分类编号，空串表示不选 */
+  @IsString() @Matches(/^(?:[1-9]\d{0,9})?$/) third_id = ''
   /** 中文名称 */
   @Transform(trim) @IsString() @Length(1, 200) name: string
   /** 英文名称 */

@@ -21,14 +21,16 @@ export class MaterialService {
     row: Material & {
       top?: { name: string; enName: string }
       sub?: { name: string; enName: string } | null
+      third?: { name: string; enName: string } | null
     },
     admin = false
   ) {
-    const categories = [row.top, row.sub].filter((item) => item != null)
+    const categories = [row.top, row.sub, row.third].filter((item) => item != null)
     return {
       _id: String(row.id),
       top_id: String(row.topId),
       sub_id: row.subId === null ? '' : String(row.subId),
+      third_id: row.thirdId == null ? '' : String(row.thirdId),
       cate_path: categories.map((item) => item.name).join(' / '),
       en_cate_path: categories.map((item) => item.enName || item.name).join(' / '),
       name: row.name,
@@ -55,9 +57,7 @@ export class MaterialService {
     const cate = q.cate_id ?? q.cateId
     if (cate && !['ALL', 'NEW'].includes(cate)) {
       const id = this.id(cate)
-      const category = await this.repo.category(id)
-      if (category?.level === 3) where.id = { in: [] }
-      else where.OR = [{ topId: id }, { subId: id }]
+      where.OR = [{ topId: id }, { subId: id }, { thirdId: id }]
     }
     const text = (q.searchValue ?? q.searchVal)?.trim()
     const and: Prisma.MaterialWhereInput[] = []
@@ -102,7 +102,8 @@ export class MaterialService {
   /** 校验分类层级和类型，显式映射持久化字段 */
   private async data(dto: MaterialDto): Promise<Prisma.MaterialUncheckedCreateInput> {
     const topId = this.id(dto.top_id),
-      subId = dto.sub_id ? this.id(dto.sub_id) : null
+      subId = dto.sub_id ? this.id(dto.sub_id) : null,
+      thirdId = dto.third_id ? this.id(dto.third_id) : null
     const top = await this.repo.category(topId)
     if (!top || top.level !== 1 || top.type !== dto.type)
       throw new BadRequestException('一级分类与素材类型不匹配')
@@ -111,9 +112,16 @@ export class MaterialService {
       if (!sub || sub.level !== 2 || sub.parentId !== topId || sub.type !== dto.type)
         throw new BadRequestException('二级分类不属于当前一级分类')
     }
+    if (thirdId) {
+      if (!subId) throw new BadRequestException('选择三级分类前必须选择二级分类')
+      const third = await this.repo.category(thirdId)
+      if (!third || third.level !== 3 || third.parentId !== subId || third.type !== dto.type)
+        throw new BadRequestException('三级分类不属于当前二级分类')
+    }
     return {
       topId,
       subId,
+      thirdId,
       name: dto.name,
       enName: dto.en_name,
       coverUrl: dto.cover_url,
