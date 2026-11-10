@@ -158,7 +158,13 @@ export class MaterialService {
   }
   /** 管理员删除素材 */
   async remove(id: string) {
-    await this.write(() => this.repo.remove(this.id(id)))
+    try {
+      await this.repo.remove(this.id(id))
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025')
+        throw new NotFoundException('素材不存在')
+      throw e
+    }
     return { deletedCount: 1 }
   }
 }

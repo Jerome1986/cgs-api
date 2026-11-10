@@ -126,7 +126,6 @@ model Category {
 /// 后台与Electron共享素材
 model Material {
   favorites UserFavorite[]
-  downloadGrants DownloadGrant[]
   /// 素材编号
   id Int @id @default(autoincrement())
   /// 一级分类编号
@@ -238,6 +237,7 @@ model UserFavorite {
 model DownloadGrant {
   id Int @id @default(autoincrement())
   userId Int @map("user_id")
+  /// 原素材编号；删除素材后保留授权及扣费凭据，不建立素材外键
   materialId Int @map("material_id")
   kind String @db.VarChar(16)
   chargedCoins Int @default(0) @map("charged_coins")
@@ -245,9 +245,9 @@ model DownloadGrant {
   completedAt DateTime? @map("completed_at")
   createdAt DateTime @default(now()) @map("created_at")
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
-  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
   @@unique([userId, materialId])
   @@index([userId, completedAt])
+  @@index([materialId], map: "download_grants_material_fk")
   @@map("download_grants")
 }
 

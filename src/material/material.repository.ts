@@ -50,6 +50,6 @@ export class MaterialRepository {
   }
   /** 删除素材记录，保留磁盘文件避免误删共享资源 */
   remove(id: number) {
-    return this.prisma.material.delete({ where: { id } })
+    return this.prisma.material.delete({ where: { id }, select: { id: true } })
   }
 }
